@@ -33,6 +33,20 @@ app.mount("/data", StaticFiles(directory="data"), name="data")
 
 @app.post("/handle_excel_file", tags=["QA"])
 def handle_excel_file(
+    file: Annotated[
+        bytes,
+        File(
+            title="The excel file to handle",
+            description="The bytes object contains the Excel file you want to process.",
+        ),
+    ],
+    query: Annotated[
+        str,
+        Body(
+            title="The user query",
+            description="The user query containing all the changes to be applied to the Excel file.",
+        ),
+    ],
     username: Annotated[
         str,
         Body(
@@ -45,20 +59,6 @@ def handle_excel_file(
         Body(
             title="The user password",
             description="The user's password for using the yellowsys llm api.",
-        ),
-    ],
-    query: Annotated[
-        str,
-        Body(
-            title="The user query",
-            description="The user query containing all the changes to be applied to the Excel file.",
-        ),
-    ],
-    file: Annotated[
-        bytes,
-        File(
-            title="The excel file to handle",
-            description="The bytes object contains the Excel file you want to process.",
         ),
     ],
 ):
@@ -92,7 +92,7 @@ def handle_excel_file(
     with open("./data/history.csv", "a") as f:
         f.write(f"{query}[SEP]{vba_script}[SEP]{response['response']}[EOR]\n")
 
-    file_name = "./data/output.xlsx"
+    file_name = "data/output.xlsx"
     with open(file_name, "wb") as f:
         f.write(file)
     return {"url": file_name}
