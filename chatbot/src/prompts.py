@@ -11,12 +11,7 @@ Voici le resultat de l'affichage des cinq premieres lignes de la feuille:
 
 def format_data(first_rows: list[list]):
     """Put list of lists in markdown table format."""
+    rows = [f"| {' | '.join(first_rows[i])} |\n" for i in range(1, len(first_rows))]
     return f"""
-    |{"|".join(first_rows[0])}|
-    |{"|".join(len(first_rows[0]) * ['----------'])}|
-    | {"|".join(first_rows[1])} |
-    | {"|".join(first_rows[2])}|
-    | {"|".join(first_rows[3])} |
-    | {"|".join(first_rows[4])} |
-    | {"|".join(first_rows[5])} |
+| {" | ".join(first_rows[0])} |\n|{"|".join(len(first_rows[0]) * ['----------'])}|\n{"".join(rows)}
     """
