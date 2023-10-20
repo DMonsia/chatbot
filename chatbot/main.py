@@ -7,7 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from openpyxl import load_workbook
 from src.api_llm import conversation_with_powerbi
-from src.handle_excel_file import XLS_SIGNATURE, get_first_rows, get_xls_first_rows
+from src.handle_excel_file import (
+    XLS_SIGNATURE,
+    MacroExecutionError,
+    get_first_rows,
+    get_xls_first_rows,
+    inject_macro,
+)
 from src.prompts import _prompt_sys_template, format_data
 from src.utils import get_substring
 
@@ -88,7 +94,8 @@ def handle_excel_file(
     else:  # else try to use openpyxl for other format
         try:
             wb = load_workbook(filename=BytesIO(file))
-            ext = ".xlsx"
+            # TODO: get file extension
+            ext = ".xlsm"
         except Exception as e:
             raise HTTPException(
                 status_code=500,
@@ -102,14 +109,22 @@ def handle_excel_file(
         sheet_name=sheet_name, first_rows=format_data(first_rows)
     )
     prompt = sys_role + """\n\n{history} \n\nHuman: {input}\n\nAssistant:"""
-    response = {
-        "response": "conversation_with_powerbi(prompt, query, username, password)"
-    }
-    vba_script = "get_substring(response['response'], start='Sub', end='End Sub')"
+    response = conversation_with_powerbi(prompt, query, username, password)
+    macro = get_substring(response["response"], start="Sub", end="End Sub")
     with open("./data/history.csv", "a") as f:
-        f.write(f"{query}[SEP]{vba_script}[SEP]{response['response']}[EOR]\n")
+        f.write(f"{query}[SEP]{macro}[SEP]{response['response']}[EOR]\n")
 
-    file_name = f"data/output{ext}"
+    file_name = r"data\output" + ext
     with open(file_name, "wb") as f:
         f.write(file)
-    return {"url": file_name}
+    try:
+        xlsm_file = inject_macro(file_name, macro)
+        return {"url": xlsm_file}
+    except MacroExecutionError as exc:
+        print("\n\n")
+        print(exc)
+        print("\n\n")
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc

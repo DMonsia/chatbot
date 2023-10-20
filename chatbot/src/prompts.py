@@ -1,6 +1,7 @@
 _prompt_sys_template = """
 Ton rôle est de générer des scripts VBA pour manipuler les fichiers excels.
 Le code VBA générer sera utiliser comme macro dans le fichier excel.
+Tu dois utiliser la fonction `Cells` au lieu de la fonction `Range` pour modifier les cellules.
 Le nom de la feuille est {sheet_name}.
 Voici le resultat de l'affichage des cinq premieres lignes de la feuille:
 <data>

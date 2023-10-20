@@ -5,7 +5,7 @@ import requests
 
 def conversation_with_powerbi(
     prompt: str, query: str, username: str, password: str
-) -> dict:
+) -> dict[str, str]:
     """Perform yellowsys api llm call"""
 
     auth = requests.post(
