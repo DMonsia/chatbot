@@ -1,6 +1,9 @@
+import contextlib
+import os
 from io import BytesIO
 from typing import Annotated
 
+import win32com
 import xlrd
 from fastapi import Body, FastAPI, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +19,11 @@ from src.handle_excel_file import (
 )
 from src.prompts import _prompt_sys_template, format_data
 from src.utils import get_substring
+
+# Empty gen_py output directory
+for file in os.listdir(win32com.__gen_path__):
+    with contextlib.suppress(Exception):
+        os.remove(os.path.join(win32com.__gen_path__, file))
 
 app = FastAPI(
     title="API ChatBot",
