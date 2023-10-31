@@ -13,7 +13,7 @@ from src.handle_excel_file import (
     inject_macro,
 )
 from src.prompts import _prompt_sys_template, format_data
-from src.utils import get_substring
+from src.utils import MacroNotFound, get_substring
 
 # Empty gen_py output directory
 for file in os.listdir(win32com.__gen_path__):
@@ -100,7 +100,13 @@ def handle_excel_file(
     )
     prompt = sys_role_and_data + """\n\n{history} \n\nHuman: {input}\n\nAssistant:"""
     response = conversation_with_powerbi(prompt, query, username, password)
-    macro = get_substring(response["response"], start="Sub", end="End Sub")
+    try:
+        macro = get_substring(response["response"], start="Sub", end="End Sub")
+    except MacroNotFound as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
 
     with open("./data/history.csv", "a") as f:
         f.write(f"{query}[SEP]{macro}[SEP]{response['response']}[EOR]\n")
