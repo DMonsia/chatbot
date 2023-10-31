@@ -6,25 +6,37 @@ import pythoncom
 from win32com.client import Dispatch
 
 sys.coinit_flags = 0  # comtypes.COINIT_MULTITHREADED appel CoInitialize.
-XLS_SIGNATURE: bytes = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 
 class MacroExecutionError(Exception):
     pass
 
 
-def get_first_rows(sheet) -> list[list]:
-    """Extract the first five lines of the Excel sheet."""
-    return [
-        [str(sheet.cell(i, j).value) for j in range(1, sheet.max_column + 1)]
-        for i in range(1, min(6, sheet.max_row) + 1)
-    ]
+class ExcelFileProcessingError(Exception):
+    pass
 
 
-def get_xls_first_rows(sheet) -> list[list]:
-    return [
-        [str(cell.value) for cell in sheet.row(i)] for i in range(min(6, sheet.nrows))
-    ]
+def get_first_rows_by_sheet(file: str) -> dict[str, list]:
+    """Extract the first five lines of each sheet in the Excel file."""
+    com_instance = Dispatch(
+        "Excel.Application", pythoncom.CoInitialize()
+    )  # USING WIN32COM
+    com_instance.Visible = False
+    com_instance.DisplayAlerts = False
+    try:
+        objworkbook = com_instance.Workbooks.Open(os.path.join(os.getcwd(), file))
+        rows_by_sheet = {}
+        for sheet in objworkbook.Sheets:
+            temp = sheet.UsedRange()
+            rows_by_sheet[sheet.Name] = [[str(val) for val in row] for row in temp[:5]]
+    except Exception as e:
+        print("\n", e, "\n")
+        raise ExcelFileProcessingError(
+            "An error occurred while processing the file."
+        ) from e
+    finally:
+        com_instance.Quit()
+    return rows_by_sheet
 
 
 def extract_macro_name(macro: str):
@@ -68,9 +80,9 @@ def inject_macro(file: str, macro: str):
         objworkbook.SaveAs(os.path.join(os.getcwd(), xlsm_file), FileFormat=52)
     except Exception as e:
         # TODO: try again after fixing the vba issue using fix_macro_issue
-        print("\n\n")
+        print("\n")
         print(e)
-        print("\n\n")
+        print("\n")
         raise MacroExecutionError("Cannot run macro! Macro must contain errors.") from e
     finally:
         objworkbook.Close()

@@ -1,20 +1,15 @@
 import contextlib
 import os
-from io import BytesIO
 from typing import Annotated
 
 import win32com
-import xlrd
 from fastapi import Body, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from openpyxl import load_workbook
 from src.api_llm import conversation_with_powerbi
 from src.handle_excel_file import (
-    XLS_SIGNATURE,
     MacroExecutionError,
-    get_first_rows,
-    get_xls_first_rows,
+    get_first_rows_by_sheet,
     inject_macro,
 )
 from src.prompts import _prompt_sys_template, format_data
@@ -93,38 +88,24 @@ def handle_excel_file(
     # And then select the frist 5 rows to pass to the prompt context
     # get file content
     file_content = file.file.read()
-    # use xlrd to read xls file
-    if file_content.startswith(XLS_SIGNATURE):
-        wb = xlrd.open_workbook(file_contents=file_content)
-        sheet_name = wb.sheet_names()[0]
-        sheet = wb.sheet_by_name(sheet_name)
-        first_rows = get_xls_first_rows(sheet)
-    else:  # else try to use openpyxl for other format
-        try:
-            wb = load_workbook(filename=BytesIO(file_content))
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail="File is not supported! Only Excel xls, xlsx, xlsm, xltx and xltm files are supported",
-            ) from e
-        sheet_name = wb.sheetnames[0]
-        sheet = wb[sheet_name]
-        first_rows = get_first_rows(sheet)
 
-    sys_role = _prompt_sys_template.format(
-        sheet_name=sheet_name, first_rows=format_data(first_rows)
+    file_name = os.path.join("data", file.filename)
+    with open(file_name, "wb") as f:
+        f.write(file_content)
+
+    rows_by_sheet = get_first_rows_by_sheet(file_name)
+    data = "".join(format_data(sheet, rows) for sheet, rows in rows_by_sheet.items())
+    sys_role_and_data = _prompt_sys_template.format(
+        sheet_names=list(rows_by_sheet.keys()), data=data
     )
-    prompt = sys_role + """\n\n{history} \n\nHuman: {input}\n\nAssistant:"""
+    prompt = sys_role_and_data + """\n\n{history} \n\nHuman: {input}\n\nAssistant:"""
     response = conversation_with_powerbi(prompt, query, username, password)
     macro = get_substring(response["response"], start="Sub", end="End Sub")
 
     with open("./data/history.csv", "a") as f:
         f.write(f"{query}[SEP]{macro}[SEP]{response['response']}[EOR]\n")
 
-    file_name = os.path.join("data", file.filename)
-    with open(file_name, "wb") as f:
-        f.write(file_content)
-    try:
+    try:  # try macro injection and execution in file
         xlsm_file = inject_macro(file_name, macro).replace("\\", "/")
         return {"url": xlsm_file}
     except MacroExecutionError as exc:
