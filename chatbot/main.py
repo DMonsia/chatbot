@@ -5,7 +5,7 @@ from typing import Annotated
 
 import win32com
 import xlrd
-from fastapi import Body, FastAPI, File, HTTPException
+from fastapi import Body, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from openpyxl import load_workbook
@@ -48,20 +48,6 @@ app.mount("/data", StaticFiles(directory="data"), name="data")
 
 @app.post("/handle_excel_file", tags=["QA"])
 def handle_excel_file(
-    file: Annotated[
-        bytes,
-        File(
-            title="The excel file to handle",
-            description="The bytes object contains the Excel file you want to process.",
-        ),
-    ],
-    query: Annotated[
-        str,
-        Body(
-            title="The user query",
-            description="The user query containing all the changes to be applied to the Excel file.",
-        ),
-    ],
     username: Annotated[
         str,
         Body(
@@ -74,6 +60,20 @@ def handle_excel_file(
         Body(
             title="The user password",
             description="The user's password for using the yellowsys llm api.",
+        ),
+    ],
+    query: Annotated[
+        str,
+        Body(
+            title="The user query",
+            description="The user query containing all the changes to be applied to the Excel file.",
+        ),
+    ],
+    file: Annotated[
+        UploadFile,
+        File(
+            title="The excel file to handle",
+            description="The bytes object contains the Excel file you want to process.",
         ),
     ],
 ):
@@ -91,19 +91,17 @@ def handle_excel_file(
     """
     # We assume that the data are on the first sheet.
     # And then select the frist 5 rows to pass to the prompt context
-
+    # get file content
+    file_content = file.file.read()
     # use xlrd to read xls file
-    if file.startswith(XLS_SIGNATURE):
-        wb = xlrd.open_workbook(file_contents=file)
+    if file_content.startswith(XLS_SIGNATURE):
+        wb = xlrd.open_workbook(file_contents=file_content)
         sheet_name = wb.sheet_names()[0]
         sheet = wb.sheet_by_name(sheet_name)
         first_rows = get_xls_first_rows(sheet)
-        ext = ".xls"
     else:  # else try to use openpyxl for other format
         try:
-            wb = load_workbook(filename=BytesIO(file))
-            # TODO: get file extension
-            ext = ".xlsm"
+            wb = load_workbook(filename=BytesIO(file_content))
         except Exception as e:
             raise HTTPException(
                 status_code=500,
@@ -119,19 +117,17 @@ def handle_excel_file(
     prompt = sys_role + """\n\n{history} \n\nHuman: {input}\n\nAssistant:"""
     response = conversation_with_powerbi(prompt, query, username, password)
     macro = get_substring(response["response"], start="Sub", end="End Sub")
+
     with open("./data/history.csv", "a") as f:
         f.write(f"{query}[SEP]{macro}[SEP]{response['response']}[EOR]\n")
 
-    file_name = r"data\output" + ext
+    file_name = os.path.join("data", file.filename)
     with open(file_name, "wb") as f:
-        f.write(file)
+        f.write(file_content)
     try:
-        xlsm_file = inject_macro(file_name, macro)
+        xlsm_file = inject_macro(file_name, macro).replace("\\", "/")
         return {"url": xlsm_file}
     except MacroExecutionError as exc:
-        print("\n\n")
-        print(exc)
-        print("\n\n")
         raise HTTPException(
             status_code=500,
             detail=str(exc),

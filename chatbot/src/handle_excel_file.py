@@ -45,7 +45,7 @@ def inject_macro(file: str, macro: str):
     """This function injects and executes a macro in a new xlsm file.
 
     Args:
-        `file` (str): An input Excel file where you want to add and run a macro.
+        `file` (str): An input Excel file path where you want to add and run a macro.
             It will be in one of these formats xls, xlsx, xlsm, xltx or xltm.
         `macro` (str): A vba script that you want to run as a macro.
 
@@ -64,10 +64,13 @@ def inject_macro(file: str, macro: str):
     macro = fix_macro_issue(macro)
     try:
         objworkbook.Application.Run(macro_name)
-        xlsm_file = re.sub("\.\w+", "_new.xlsm", file)  # .replace('\\', "/")
-        objworkbook.SaveAs(os.path.join(os.getcwd(), xlsm_file))
+        xlsm_file = re.sub("\.\w+", ".xlsm", file)
+        objworkbook.SaveAs(os.path.join(os.getcwd(), xlsm_file), FileFormat=52)
     except Exception as e:
         # TODO: try again after fixing the vba issue using fix_macro_issue
+        print("\n\n")
+        print(e)
+        print("\n\n")
         raise MacroExecutionError("Cannot run macro! Macro must contain errors.") from e
     finally:
         objworkbook.Close()
